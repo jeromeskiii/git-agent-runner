@@ -1,0 +1,14 @@
+# Sample agent-runner config — copy to your project root and customize.
+# Top-level keys are read directly; `[agents.<name>]` blocks register new agents.
+
+default_agent = "claude"
+poll_interval = 10
+default_timeout = 300
+subprocess_timeout = 120
+retry_attempts = 3
+retry_backoff = 1.5
+
+# Register a custom agent. The CLI ``--agent <name>`` flag will then accept it.
+# [agents.kiro]
+# command = ["kiro", "--yes"]
+# description = "Kiro CLI"

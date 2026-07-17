@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel in-progress runs for the same branch when a new commit lands.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - run: uv sync --extra dev
+      - name: ruff check
+        run: uv run ruff check agent_runner/
+      - name: ruff format --check
+        run: uv run ruff format --check agent_runner/
+
+  typecheck:
+    name: Typecheck (mypy --strict)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - run: uv sync --extra dev
+      - name: mypy
+        run: uv run mypy agent_runner
+
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - name: Install gtr (git-worktree-runner)
+        run: |
+          # install.sh expects macOS for the homebrew path; on Linux we just
+          # symlink the binary into ~/.local/bin and prepend it to PATH.
+          mkdir -p "$HOME/.local/bin"
+          ln -sf "$(pwd)/git-worktree-runner/bin/git-gtr" "$HOME/.local/bin/git-gtr"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - run: uv sync --extra dev
+      - name: Verify CLI is installed
+        run: |
+          uv run agent-runner --version
+          git-gtr version
+      - name: Run tests with coverage
+        run: |
+          uv run pytest agent_runner/tests \
+            --cov=agent_runner \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            -v
+      - name: Upload coverage artifact
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.python-version }}
+          path: coverage.xml
+          retention-days: 30

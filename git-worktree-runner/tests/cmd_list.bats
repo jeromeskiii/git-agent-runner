@@ -1,0 +1,111 @@
+#!/usr/bin/env bats
+# Tests for cmd_list in lib/commands/list.sh
+
+load test_helper
+
+setup() {
+  setup_integration_repo
+  source_gtr_commands
+}
+
+teardown() {
+  teardown_integration_repo
+}
+
+@test "cmd_list shows main repo" {
+  run cmd_list
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[main repo]"* ]]
+}
+
+@test "cmd_list shows created worktree" {
+  create_test_worktree "list-me"
+  run cmd_list
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"list-me"* ]]
+}
+
+@test "cmd_list shows nested externally-created worktree" {
+  mkdir -p "$TEST_WORKTREES_DIR/jsmith"
+  git -C "$TEST_REPO" worktree add "$TEST_WORKTREES_DIR/jsmith/my-feature" -b jsmith/my-feature --quiet
+
+  run cmd_list
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"jsmith/my-feature"* ]]
+  [[ "$output" == *"$TEST_WORKTREES_DIR/jsmith/my-feature"* ]]
+  [[ "$output" != *"(detached)"*"$TEST_WORKTREES_DIR/jsmith"* ]]
+}
+
+@test "cmd_list --porcelain outputs TSV format" {
+  create_test_worktree "porcelain-test"
+  local output
+  output=$(cmd_list --porcelain)
+  # First line: main repo
+  local first_line
+  first_line=$(echo "$output" | head -1)
+  [[ "$first_line" == *"$TEST_REPO"* ]]
+  # Should contain tab-separated fields
+  [[ "$output" == *$'\t'* ]]
+}
+
+@test "cmd_list --porcelain includes worktree branch and status" {
+  create_test_worktree "tsv-test"
+  local output
+  output=$(cmd_list --porcelain)
+  # Worktree line should have: path<tab>branch<tab>status
+  [[ "$output" == *"tsv-test"*$'\t'*"ok"* ]]
+}
+
+@test "cmd_list --porcelain includes nested externally-created worktree" {
+  mkdir -p "$TEST_WORKTREES_DIR/jsmith"
+  git -C "$TEST_REPO" worktree add "$TEST_WORKTREES_DIR/jsmith/my-feature" -b jsmith/my-feature --quiet
+
+  local output
+  output=$(cmd_list --porcelain)
+
+  local expected_row="$TEST_WORKTREES_DIR/jsmith/my-feature"$'\t'"jsmith/my-feature"$'\t'"ok"
+  local bogus_parent="$TEST_WORKTREES_DIR/jsmith"$'\t'"(detached)"$'\t'"missing"
+  [[ "$output" == *"$expected_row"* ]]
+  [[ "$output" != *"$bogus_parent"* ]]
+}
+
+@test "cmd_list with no worktrees still works" {
+  run cmd_list
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Git Worktrees"* ]]
+}
+
+@test "cmd_list human format has header" {
+  run cmd_list
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"BRANCH"* ]]
+  [[ "$output" == *"PATH"* ]]
+}
+
+@test "cmd_list from inside a worktree shows all worktrees" {
+  create_test_worktree "wt-inside"
+  cd "$TEST_WORKTREES_DIR/wt-inside"
+  run cmd_list
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[main repo]"* ]]
+  [[ "$output" == *"wt-inside"* ]]
+  [[ "$output" == *"$TEST_REPO"* ]]
+}
+
+@test "cmd_list --porcelain from inside a worktree includes main repo" {
+  create_test_worktree "wt-porcelain"
+  cd "$TEST_WORKTREES_DIR/wt-porcelain"
+  local output
+  output=$(cmd_list --porcelain)
+  [[ "$output" == *"$TEST_REPO"* ]]
+  [[ "$output" == *"wt-porcelain"* ]]
+}
+
+@test "cmd_list from a repo subdirectory shows the main repo root" {
+  mkdir -p "$TEST_REPO/subdir/nested"
+  cd "$TEST_REPO/subdir/nested"
+  run cmd_list
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"$TEST_REPO"* ]]
+  [[ "$output" != *"subdir/..-worktrees"* ]]
+}

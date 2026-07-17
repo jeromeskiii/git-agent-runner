@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# gtr - Convenience wrapper for git-gtr
+# The main binary is bin/git-gtr; this wrapper allows ./bin/gtr for development.
+
+# Find this script's real location (resolve symlinks)
+SRC="${BASH_SOURCE[0]}"
+while [ -h "$SRC" ]; do
+  DIR="$(cd -P "$(dirname "$SRC")" && pwd)"
+  SRC="$(readlink "$SRC")"
+  [[ $SRC != /* ]] && SRC="$DIR/$SRC"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SRC")" && pwd)"
+
+# Execute the main git-gtr script
+exec "$SCRIPT_DIR/git-gtr" "$@"

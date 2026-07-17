@@ -1,0 +1,43 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+
+# --- Virtualenvs ---
+.venv/
+venv/
+env/
+
+# --- Test + coverage ---
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# --- OS / editor cruft ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# --- Local env ---
+.env
+.env.local
+.env.*.local
+
+# --- Agent runtime artifacts ---
+.cline/
+.continue/
+.cache/
+.worktrees/    # gtr-created worktrees

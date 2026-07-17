@@ -1,0 +1,480 @@
+# Configuration Reference
+
+> Complete configuration guide for git-worktree-runner
+
+[Back to README](../README.md) | [Advanced Usage](advanced-usage.md) | [Troubleshooting](troubleshooting.md)
+
+---
+
+## Table of Contents
+
+- [Configuration Sources](#configuration-sources)
+- [Team Configuration (.gtrconfig)](#team-configuration-gtrconfig)
+- [Worktree Settings](#worktree-settings)
+- [Provider Settings](#provider-settings)
+- [Editor Settings](#editor-settings)
+- [AI Tool Settings](#ai-tool-settings)
+- [File Copying](#file-copying)
+- [Directory Copying](#directory-copying)
+- [Hooks](#hooks)
+- [UI Settings](#ui-settings)
+- [Shell Completions](#shell-completions)
+- [Configuration Examples](#configuration-examples)
+- [Environment Variables](#environment-variables)
+
+---
+
+## Configuration Sources
+
+All configuration is stored via `git config`, making it easy to manage per-repository or globally. You can also use a `.gtrconfig` file for team-shared settings.
+
+**Configuration precedence** (highest to lowest):
+
+1. `git config --local` (`.git/config`) - personal overrides
+2. `.gtrconfig` (repo root) - team defaults
+3. `git config --global` (`~/.gitconfig`) - user defaults
+4. `git config --system` (`/etc/gitconfig`) - system defaults
+5. Environment variables
+6. Default values
+
+---
+
+## Team Configuration (.gtrconfig)
+
+Create a `.gtrconfig` file in your repository root to share configuration across your team:
+
+```gitconfig
+# .gtrconfig - commit this file to share settings with your team
+
+[copy]
+    include = **/.env.example
+    include = *.md
+    exclude = **/.env
+
+[copy]
+    includeDirs = node_modules
+    excludeDirs = node_modules/.cache
+
+[hooks]
+    postCreate = npm install
+    postCreate = cp .env.example .env
+
+[defaults]
+    editor = cursor
+    ai = claude
+    remote = upstream
+```
+
+> [!TIP]
+> See `templates/.gtrconfig.example` for a complete example with all available settings.
+
+> [!IMPORTANT]
+> Hooks and editor/AI defaults from `.gtrconfig` are executable command entries. They are ignored until you review them with `git gtr trust`; changing those entries requires re-approval.
+
+---
+
+## Worktree Settings
+
+```bash
+# Base directory for worktrees
+# Default: <repo-name>-worktrees (sibling to repo)
+# Supports: absolute paths, repo-relative paths, tilde expansion
+gtr.worktrees.dir = <path>
+
+# Examples:
+# Absolute path
+gtr.worktrees.dir = /Users/you/all-worktrees/my-project
+
+# Repo-relative (inside repository - requires .gitignore entry)
+gtr.worktrees.dir = .worktrees
+
+# Home directory (tilde expansion)
+gtr.worktrees.dir = ~/worktrees/my-project
+
+# Folder prefix (default: "")
+gtr.worktrees.prefix = dev-
+
+# Default branch (default: auto-detect)
+gtr.defaultBranch = main
+
+# Default remote for fetches, tracking, and default base refs (default: origin)
+gtr.defaultRemote = upstream
+```
+
+> [!IMPORTANT]
+> If storing worktrees inside the repository, add the directory to `.gitignore`.
+
+```bash
+echo "/.worktrees/" >> .gitignore
+```
+
+---
+
+## Provider Settings
+
+The `clean --merged` and `clean --closed` commands auto-detect your hosting provider from the `origin` remote URL (`github.com` → GitHub, `gitlab.com` → GitLab). For self-hosted instances, set the provider explicitly:
+
+```bash
+# Override auto-detected hosting provider (github or gitlab)
+gtr.provider = gitlab
+```
+
+**Setup:**
+
+```bash
+# Self-hosted GitLab
+git gtr config set gtr.provider gitlab
+
+# Self-hosted GitHub Enterprise
+git gtr config set gtr.provider github
+```
+
+**Required CLI tools:**
+
+| Provider | CLI Tool | Install                                                        |
+| -------- | -------- | -------------------------------------------------------------- |
+| GitHub   | `gh`     | [cli.github.com](https://cli.github.com/)                      |
+| GitLab   | `glab`   | [gitlab.com/gitlab-org/cli](https://gitlab.com/gitlab-org/cli) |
+
+---
+
+## Editor Settings
+
+```bash
+# Default editor: antigravity, cursor, vscode, zed, or none
+gtr.editor.default = cursor
+
+# Workspace file for VS Code/Cursor/Antigravity (relative path from worktree root)
+# If set, opens the workspace file instead of the folder
+# If not set, auto-detects *.code-workspace files in worktree root
+# Set to "none" to disable workspace lookup entirely
+gtr.editor.workspace = project.code-workspace
+```
+
+**Setup editors:**
+
+- **Antigravity**: Install from [antigravity.google](https://antigravity.google), `agy` command available after installation
+- **Cursor**: Install from [cursor.com](https://cursor.com), enable shell command
+- **VS Code**: Install from [code.visualstudio.com](https://code.visualstudio.com), enable `code` command
+- **Zed**: Install from [zed.dev](https://zed.dev), `zed` command available automatically
+
+**Workspace files:**
+
+VS Code, Cursor, and Antigravity support `.code-workspace` files for multi-root workspaces, custom settings, and recommended extensions. When opening a worktree:
+
+1. If `gtr.editor.workspace` is set to a path, opens that file (relative to worktree root)
+2. If set to `none`, disables workspace lookup (always opens folder)
+3. Otherwise, auto-detects any `*.code-workspace` file in the worktree root
+4. Falls back to opening the folder if no workspace file is found
+
+---
+
+## AI Tool Settings
+
+```bash
+# Default AI tool: none (or aider, auggie, claude, codex, continue, copilot, cursor, gemini, opencode)
+gtr.ai.default = none
+```
+
+**Supported AI Tools:**
+
+| Tool                                                                  | Install                                           | Use Case                                                 | Set as Default                               |
+| --------------------------------------------------------------------- | ------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------- |
+| **[Aider](https://aider.chat)**                                       | `pip install aider-chat`                          | Pair programming, edit files with AI                     | `git gtr config set gtr.ai.default aider`    |
+| **[Auggie CLI](https://www.augmentcode.com/product/CLI)**             | `npm install -g @augmentcode/auggie`              | Context-aware agentic CLI for automation and development | `git gtr config set gtr.ai.default auggie`   |
+| **[Claude Code](https://claude.com/claude-code)**                     | Install from claude.com                           | Terminal-native coding agent                             | `git gtr config set gtr.ai.default claude`   |
+| **[Codex CLI](https://github.com/openai/codex)**                      | `npm install -g @openai/codex`                    | OpenAI coding assistant                                  | `git gtr config set gtr.ai.default codex`    |
+| **[Continue](https://continue.dev)**                                  | See [docs](https://docs.continue.dev/cli/install) | Open-source coding agent                                 | `git gtr config set gtr.ai.default continue` |
+| **[GitHub Copilot CLI](https://githubnext.com/projects/copilot-cli)** | `npm install -g @githubnext/copilot-cli`          | AI-powered CLI assistant by GitHub                       | `git gtr config set gtr.ai.default copilot`  |
+| **[Cursor](https://cursor.com)**                                      | Install from cursor.com                           | AI-powered editor with CLI agent                         | `git gtr config set gtr.ai.default cursor`   |
+| **[Gemini](https://github.com/google-gemini/gemini-cli)**             | `npm install -g @google/gemini-cli`               | Open-source AI coding assistant powered by Google Gemini | `git gtr config set gtr.ai.default gemini`   |
+| **[OpenCode](https://opencode.ai)**                                   | Install from opencode.ai                          | AI coding assistant                                      | `git gtr config set gtr.ai.default opencode` |
+
+**Examples:**
+
+```bash
+# Set default AI tool for this repo
+git gtr config set gtr.ai.default claude
+
+# Or set globally for all repos
+git gtr config set gtr.ai.default claude --global
+
+# Then just use git gtr ai
+git gtr ai my-feature
+
+# Pass arguments to the tool
+git gtr ai my-feature -- --plan "refactor auth"
+```
+
+---
+
+## File Copying
+
+Copy files to new worktrees using glob patterns:
+
+```bash
+# Add patterns to copy (multi-valued)
+git gtr config add gtr.copy.include "**/.env.example"
+git gtr config add gtr.copy.include "**/CLAUDE.md"
+git gtr config add gtr.copy.include "*.config.js"
+
+# Exclude patterns (multi-valued)
+git gtr config add gtr.copy.exclude "**/.env"
+git gtr config add gtr.copy.exclude "**/secrets.*"
+```
+
+### Using .worktreeinclude file
+
+Alternatively, create a `.worktreeinclude` file in your repository root:
+
+```gitignore
+# .worktreeinclude - files to copy to new worktrees
+# Comments start with #
+
+**/.env.example
+**/CLAUDE.md
+*.config.js
+```
+
+The file uses `.gitignore`-style syntax (one pattern per line, `#` for comments, empty lines ignored). Patterns from `.worktreeinclude` are merged with `gtr.copy.include` config settings - both sources are used together.
+
+### Security Best Practices
+
+**The key distinction:** Development secrets (test API keys, local DB passwords) are **low risk** on personal machines. Production credentials are **high risk** everywhere.
+
+```bash
+# Personal dev: copy what you need to run dev servers
+git gtr config add gtr.copy.include "**/.env.development"
+git gtr config add gtr.copy.include "**/.env.local"
+git gtr config add gtr.copy.exclude "**/.env.production"  # Never copy production
+```
+
+> [!TIP]
+> The tool only prevents path traversal (`../`). Everything else is your choice - copy what you need for your worktrees to function.
+
+---
+
+## Directory Copying
+
+Copy entire directories (like `node_modules`, `.venv`, `vendor`) to avoid reinstalling dependencies:
+
+```bash
+# Copy dependency directories to speed up worktree creation
+git gtr config add gtr.copy.includeDirs "node_modules"
+git gtr config add gtr.copy.includeDirs ".venv"
+git gtr config add gtr.copy.includeDirs "vendor"
+
+# Exclude specific nested directories (supports glob patterns)
+git gtr config add gtr.copy.excludeDirs "node_modules/.cache"  # Exclude exact path
+git gtr config add gtr.copy.excludeDirs "node_modules/.npm"    # Exclude npm cache (may contain tokens)
+
+# Exclude using wildcards
+git gtr config add gtr.copy.excludeDirs "node_modules/.*"      # Exclude all hidden dirs in node_modules
+git gtr config add gtr.copy.excludeDirs "*/.cache"             # Exclude .cache at any level
+```
+
+> [!WARNING]
+> Dependency directories may contain sensitive files (credentials, tokens, cached secrets). Always use `gtr.copy.excludeDirs` to exclude sensitive subdirectories if needed.
+
+**Use cases:**
+
+- **JavaScript/TypeScript:** Copy `node_modules` to avoid `npm install` (can take minutes for large projects)
+- **Python:** Copy `.venv` or `venv` to skip `pip install`
+- **PHP:** Copy `vendor` to skip `composer install`
+- **Go:** Copy build caches in `.cache` or `bin` directories
+
+**How it works:** The tool uses `find` to locate directories by name and copies them with `cp -r`. This is much faster than reinstalling dependencies but uses more disk space.
+
+---
+
+## Hooks
+
+Run custom commands during worktree operations:
+
+```bash
+# Post-create hooks (multi-valued, run in order)
+git gtr config add gtr.hook.postCreate "npm install"
+git gtr config add gtr.hook.postCreate "npm run build"
+
+# Pre-remove hooks (run before deletion, abort on failure)
+git gtr config add gtr.hook.preRemove "npm run cleanup"
+
+# Post-remove hooks
+git gtr config add gtr.hook.postRemove "echo 'Cleaned up!'"
+
+# Post-cd hooks (run after gtr cd or gtr new --cd, in current shell)
+git gtr config add gtr.hook.postCd "source ./vars.sh"
+```
+
+**Hook execution order:**
+
+| Hook         | Timing                           | Use Case                                    |
+| ------------ | -------------------------------- | ------------------------------------------- |
+| `postCreate` | After worktree creation          | Setup, install dependencies                 |
+| `preRemove`  | Before worktree deletion         | Cleanup requiring directory access          |
+| `postRemove` | After worktree deletion          | Notifications, logging                      |
+| `postCd`     | After `gtr cd` or `gtr new --cd` changes directory | Re-source environment, update shell context |
+
+> **Note:** Pre-remove hooks abort removal on failure. Use `--force` to skip failed hooks.
+>
+> **Note:** `postCd` hooks run in the **current shell** (not a subshell) so they can modify environment variables. They only run via shell integration (`gtr cd`, `gtr new --cd`), not raw `git gtr` commands or `git gtr go`. Failures warn but don't undo the directory change.
+
+**Environment variables available in hooks:**
+
+- `REPO_ROOT` - Repository root path
+- `WORKTREE_PATH` - Worktree path
+- `BRANCH` - Branch name
+
+**Examples for different build tools:**
+
+```bash
+# Node.js (npm)
+git gtr config add gtr.hook.postCreate "npm install"
+
+# Node.js (pnpm)
+git gtr config add gtr.hook.postCreate "pnpm install"
+
+# Python
+git gtr config add gtr.hook.postCreate "pip install -r requirements.txt"
+
+# Ruby
+git gtr config add gtr.hook.postCreate "bundle install"
+
+# Rust
+git gtr config add gtr.hook.postCreate "cargo build"
+```
+
+---
+
+## UI Settings
+
+Control color output behavior.
+
+| Git Config Key | `.gtrconfig` Key | Description       | Values                              |
+| -------------- | ---------------- | ----------------- | ----------------------------------- |
+| `gtr.ui.color` | `ui.color`       | Color output mode | `auto` (default), `always`, `never` |
+
+```bash
+# Disable color output
+git gtr config set gtr.ui.color never
+
+# Force color output (e.g., when piping to a pager)
+git gtr config set gtr.ui.color always
+```
+
+**Precedence**: `NO_COLOR` env (highest) > `GTR_COLOR` env > `gtr.ui.color` config > auto-detect (TTY).
+
+The `NO_COLOR` environment variable ([no-color.org](https://no-color.org)) always wins regardless of other settings.
+
+---
+
+## Shell Completions
+
+Enable tab completion using the built-in `completion` command.
+Homebrew installs native Bash, Zsh, and Fish completion files automatically, so
+manual setup is mainly for source installs or explicit shell configuration.
+
+### Bash
+
+Requires `bash-completion` v2:
+
+```bash
+# macOS
+brew install bash-completion@2
+
+# Ubuntu/Debian
+sudo apt install bash-completion
+
+# Add to ~/.bashrc
+source <(git gtr completion bash)
+```
+
+### Zsh
+
+Add to `~/.zshrc` **before** any existing `compinit` call:
+
+```bash
+eval "$(git gtr completion zsh)"
+```
+
+<details>
+<summary>Why before compinit?</summary>
+
+Zsh needs to know `gtr` is a valid git subcommand before the completion system initializes. The `completion zsh` command outputs the required `zstyle` registration.
+
+</details>
+
+### Fish
+
+```bash
+mkdir -p ~/.config/fish/completions
+git gtr completion fish > ~/.config/fish/completions/git-gtr.fish
+```
+
+---
+
+## Configuration Examples
+
+### Minimal Setup (Just Basics)
+
+```bash
+git gtr config set gtr.worktrees.prefix "wt-"
+git gtr config set gtr.defaultBranch "main"
+```
+
+### Full-Featured Setup (Node.js Project)
+
+```bash
+# Worktree settings
+git gtr config set gtr.worktrees.prefix "wt-"
+
+# Editor
+git gtr config set gtr.editor.default cursor
+
+# Copy environment templates
+git gtr config add gtr.copy.include "**/.env.example"
+git gtr config add gtr.copy.include "**/.env.development"
+git gtr config add gtr.copy.exclude "**/.env.local"
+
+# Build hooks
+git gtr config add gtr.hook.postCreate "pnpm install"
+git gtr config add gtr.hook.postCreate "pnpm run build"
+```
+
+### Global Defaults
+
+```bash
+# Set global preferences
+git gtr config set gtr.editor.default cursor --global
+git gtr config set gtr.ai.default claude --global
+git gtr config set gtr.defaultRemote upstream --global
+```
+
+---
+
+## Environment Variables
+
+| Variable              | Description                                                          | Default                    |
+| --------------------- | -------------------------------------------------------------------- | -------------------------- |
+| `GTR_DIR`             | Override script directory location                                   | Auto-detected              |
+| `GTR_WORKTREES_DIR`   | Override base worktrees directory                                    | `gtr.worktrees.dir` config |
+| `GTR_EDITOR_CMD`      | Custom editor command (e.g., `emacs`)                                | None                       |
+| `GTR_EDITOR_CMD_NAME` | First word of `GTR_EDITOR_CMD` for availability checks               | None                       |
+| `GTR_AI_CMD`          | Custom AI tool command (e.g., `copilot`)                             | None                       |
+| `GTR_AI_CMD_NAME`     | First word of `GTR_AI_CMD` for availability checks                   | None                       |
+| `GTR_DEFAULT_REMOTE`  | Remote used for default base refs and tracking                       | `origin`                   |
+| `GTR_COLOR`           | Override color output (`always`, `never`, `auto`)                    | `auto`                     |
+| `GTR_PROVIDER`        | Override hosting provider (`github` or `gitlab`)                     | Auto-detected from URL     |
+| `NO_COLOR`            | Disable color output when set ([no-color.org](https://no-color.org)) | Unset                      |
+
+**Hook environment variables** (available in hook scripts):
+
+| Variable        | Description          |
+| --------------- | -------------------- |
+| `REPO_ROOT`     | Repository root path |
+| `WORKTREE_PATH` | Worktree path        |
+| `BRANCH`        | Branch name          |
+
+---
+
+[Back to README](../README.md) | [Advanced Usage](advanced-usage.md) | [Troubleshooting](troubleshooting.md)

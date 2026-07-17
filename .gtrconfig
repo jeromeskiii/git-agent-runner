@@ -1,0 +1,12 @@
+[hooks]
+	postCreate = echo "🔧 Worktree ready — pr-agent available via: git gtr ai <id> --ai pr-agent"
+	postCd = echo "📋 pr-agent: git gtr ai <id> --ai pr-agent -- review"
+
+[defaults]
+	ai = pr-agent
+
+[editor]
+	workspace = none
+
+[gtr]
+	worktrees = dir = .worktrees

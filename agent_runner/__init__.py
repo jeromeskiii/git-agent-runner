@@ -18,6 +18,7 @@ from __future__ import annotations
 from .config import AgentSpec, Config, load_config
 from .orchestrator import PrActionResult, improve_pr, review_pr, run_pipeline
 from .pipeline import PipelineContext, run_full_pipeline
+from .preflight import PreflightResult, run_preflight
 from .runs import RunHistory, RunRecord, new_run_id
 
 __version__ = "0.1.0"
@@ -27,6 +28,7 @@ __all__ = [
     "Config",
     "PipelineContext",
     "PrActionResult",
+    "PreflightResult",
     "RunHistory",
     "RunRecord",
     "__version__",
@@ -36,4 +38,5 @@ __all__ = [
     "review_pr",
     "run_full_pipeline",
     "run_pipeline",
+    "run_preflight",
 ]

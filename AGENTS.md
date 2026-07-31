@@ -2,7 +2,7 @@
 
 ## Role
 
-Treat this repository as the git-agent-runner operating layer. The orchestrator (`agent_runner/`) wires `git-worktree-runner` (gtr) and `pr-agent` together into a dynamic agent pipeline. Individual coding agents and review tools are replaceable components within the harness.
+Treat this repository as the all-in-one `git-agent-runner` operating layer. The orchestrator (`agent_runner/`) wires vendored `git-worktree-runner` (gtr) and `pr-agent` together into a dynamic agent pipeline. Individual coding agents and review tools are replaceable components within the harness.
 
 ## Control Flow
 
@@ -12,10 +12,10 @@ task → gtr creates worktree → AI agent works → push → PR → pr-agent re
 
 ## Component Boundaries
 
-- **Root orchestrator** (`agent_runner/`) — Python CLI, the only entry point for the integrated pipeline
-- **git-worktree-runner** (`git-worktree-runner/`) — Bash CLI, manages worktrees and launches agents
-- **pr-agent** (`pr-agent/`) — Python PR review agent, reviews/improves/describes PRs
-- **Adapters** (`git-worktree-runner/adapters/ai/pr-agent.sh`) — gtr adapter that bridges to pr-agent
+- **Root orchestrator** (`agent_runner/`) — Python CLI, the only first-party entry point for the integrated pipeline
+- **Vendored git-worktree-runner** (`vendor/git-worktree-runner/`) — Bash CLI, manages worktrees and launches agents
+- **Vendored pr-agent** (`vendor/pr-agent/`) — Python PR review agent, reviews/improves/describes PRs
+- **Adapters** (`vendor/git-worktree-runner/adapters/ai/pr-agent.sh`) — gtr adapter that bridges to pr-agent
 - **Hooks** (`.gtrconfig`) — lifecycle hooks for the pipeline
 
 ## Working Rules
@@ -24,8 +24,8 @@ task → gtr creates worktree → AI agent works → push → PR → pr-agent re
 - Preserve unrelated local modifications
 - Avoid touching `.architect/`, cache directories, build artifacts, generated outputs, or secrets
 - Treat `agent_runner/` as the main source tree for orchestrator work
-- gtr adapters live in `git-worktree-runner/adapters/ai/`
-- pr-agent configuration lives in `pr-agent/.pr_agent.toml`
+- gtr adapters live in `vendor/git-worktree-runner/adapters/ai/`
+- pr-agent configuration lives in `vendor/pr-agent/.pr_agent.toml`
 
 ## Validation
 

@@ -15,19 +15,25 @@ from agent_runner.orchestrator import PrActionResult
 
 def _args(**kwargs: object) -> MagicMock:
     ns = MagicMock()
+    if "json" not in kwargs:
+        ns.json = False
     for k, v in kwargs.items():
         setattr(ns, k, v)
+    if not hasattr(ns, "skip_preflight"):
+        ns.skip_preflight = True
     return ns
 
 
 def test_cmd_run_success(capsys: pytest.CaptureFixture[str]) -> None:
     ctx = MagicMock(
         errors=[],
+        warnings=[],
         run_id="abc123",
         branch_name="agent/x",
         worktree_path="/w",
         pr_url="https://x",
         dry_run=False,
+        preflight=None,
     )
     with patch("agent_runner.cli.run_pipeline", return_value=ctx):
         rc = cli._cmd_run(_args(task="x", repo=".", agent=None, timeout=None, dry_run=False))
@@ -39,28 +45,54 @@ def test_cmd_run_success(capsys: pytest.CaptureFixture[str]) -> None:
 
 def test_cmd_run_failure(capsys: pytest.CaptureFixture[str]) -> None:
     ctx = MagicMock(
-        errors=["boom"], run_id="abc", branch_name="", worktree_path="", pr_url="", dry_run=False
+        errors=["boom"],
+        warnings=[],
+        run_id="abc",
+        branch_name="",
+        worktree_path="",
+        pr_url="",
+        dry_run=False,
+        preflight=None,
     )
     with patch("agent_runner.cli.run_pipeline", return_value=ctx):
         rc = cli._cmd_run(_args(task="x", repo=".", agent=None, timeout=None, dry_run=False))
     assert rc == 1
     captured = capsys.readouterr()
-    assert "boom" in captured.err
+    assert "boom" in captured.out
 
 
 def test_cmd_run_dry_run_marker(capsys: pytest.CaptureFixture[str]) -> None:
     ctx = MagicMock(
         errors=[],
+        warnings=[],
         run_id="abc",
         branch_name="agent/x",
         worktree_path="/w",
         pr_url="https://x",
         dry_run=True,
+        preflight=None,
     )
     with patch("agent_runner.cli.run_pipeline", return_value=ctx):
         cli._cmd_run(_args(task="x", repo=".", agent=None, timeout=None, dry_run=True))
     out = capsys.readouterr().out
     assert "(dry-run)" in out
+
+
+def test_cmd_run_prints_warnings(capsys: pytest.CaptureFixture[str]) -> None:
+    ctx = MagicMock(
+        errors=[],
+        warnings=["path resolution failed"],
+        run_id="abc",
+        branch_name="agent/x",
+        worktree_path="",
+        pr_url="",
+        dry_run=False,
+        preflight=None,
+    )
+    with patch("agent_runner.cli.run_pipeline", return_value=ctx):
+        rc = cli._cmd_run(_args(task="x", repo=".", agent=None, timeout=None, dry_run=False))
+    assert rc == 0
+    assert "path resolution failed" in capsys.readouterr().out
 
 
 def test_cmd_review_success(capsys: pytest.CaptureFixture[str]) -> None:
@@ -71,7 +103,9 @@ def test_cmd_review_success(capsys: pytest.CaptureFixture[str]) -> None:
         rc = cli._cmd_review(_args(pr_url="u", repo="."))
     assert rc == 0
     out = capsys.readouterr().out
-    assert "✅ Review completed" in out
+    assert "✅" in out
+    assert "Review" in out
+    assert "completed" in out
 
 
 def test_cmd_review_failure(capsys: pytest.CaptureFixture[str]) -> None:
@@ -88,8 +122,10 @@ def test_cmd_review_failure(capsys: pytest.CaptureFixture[str]) -> None:
     with patch("agent_runner.cli.review_pr", return_value=result):
         rc = cli._cmd_review(_args(pr_url="u", repo="."))
     assert rc == 1
-    err = capsys.readouterr().err
-    assert "❌ Review failed" in err
+    out = capsys.readouterr().out
+    assert "❌" in out
+    assert "Review" in out
+    assert "failed" in out
 
 
 def test_cmd_improve_success(capsys: pytest.CaptureFixture[str]) -> None:
@@ -200,8 +236,87 @@ def test_main_version(capsys: pytest.CaptureFixture[str]) -> None:
 
 
 def test_main_unknown_command_exits(capsys: pytest.CaptureFixture[str]) -> None:
-    # argparse exits with code 2 on invalid choices; that's the correct behavior.
     with patch.object(sys, "argv", ["agent-runner", "nope"]):
         with pytest.raises(SystemExit) as e:
             cli.main()
     assert e.value.code == 2
+
+
+def test_cmd_doctor_no_worktrees(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    (tmp_path / ".git").mkdir()
+    with (
+        patch("agent_runner.cli.collect_agent_worktrees", return_value=[]),
+        patch("agent_runner.cli.RunHistory") as mh,
+    ):
+        mh.return_value.iter_all.return_value = iter([])
+        rc = cli._cmd_doctor(_args(repo=str(tmp_path)))
+    assert rc == 0
+    assert "no agent/* worktrees" in capsys.readouterr().out
+
+
+def test_cmd_doctor_reports_orphan(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    (tmp_path / ".git").mkdir()
+    worktrees = [{"path": "/repo/.worktrees/agent-x", "branch": "agent/x"}]
+    with (
+        patch("agent_runner.cli.collect_agent_worktrees", return_value=worktrees),
+        patch("agent_runner.cli.RunHistory") as mh,
+    ):
+        mh.return_value.iter_all.return_value = iter([])
+        rc = cli._cmd_doctor(_args(repo=str(tmp_path)))
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "orphan" in out
+
+
+def test_cmd_doctor_not_a_repo(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    rc = cli._cmd_doctor(_args(repo=str(tmp_path)))
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "not a git repository" in out
+
+
+def test_cmd_logs_marks_unfinished_run(capsys: pytest.CaptureFixture[str]) -> None:
+    from agent_runner.runs import RunRecord
+
+    start = RunRecord(run_id="u1", ts=1.0, event="run_start", task="t", agent="claude")
+    with patch("agent_runner.cli.RunHistory") as mh:
+        mh.return_value.latest.return_value = [start]
+        mh.return_value.iter_all.return_value = iter([start])
+        rc = cli._cmd_logs(_args(limit=10, prune_days=0, compact=False, json=False))
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "u1" in out
+    assert "unfinished" in out
+    assert "None" not in out
+
+
+def test_cmd_logs_json(capsys: pytest.CaptureFixture[str]) -> None:
+    from agent_runner.runs import RunRecord
+
+    start = RunRecord(run_id="u1", ts=1.0, event="run_start", task="t", agent="claude")
+    with patch("agent_runner.cli.RunHistory") as mh:
+        mh.return_value.latest.return_value = [start]
+        mh.return_value.iter_all.return_value = iter([start])
+        rc = cli._cmd_logs(_args(limit=10, prune_days=0, compact=False, json=True))
+    assert rc == 0
+    out = capsys.readouterr().out
+    data = json.loads(out)
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert data[0]["run_id"] == "u1"
+
+
+def test_cmd_doctor_json(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    (tmp_path / ".git").mkdir()
+    worktrees = [{"path": "/repo/.worktrees/agent-x", "branch": "agent/x"}]
+    with (
+        patch("agent_runner.cli.collect_agent_worktrees", return_value=worktrees),
+        patch("agent_runner.cli.RunHistory") as mh,
+    ):
+        mh.return_value.iter_all.return_value = iter([])
+        rc = cli._cmd_doctor(_args(repo=str(tmp_path), json=True, fix=False, dry_run=False))
+    assert rc == 1
+    out = capsys.readouterr().out
+    data = json.loads(out)
+    assert data["orphans"] == 1
+    assert data["worktrees"][0]["branch"] == "agent/x"

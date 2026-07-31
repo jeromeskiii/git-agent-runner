@@ -25,8 +25,8 @@ from pr_agent.git_providers import (GithubProvider, get_git_provider,
 from pr_agent.git_providers.git_provider import get_main_pr_language
 from pr_agent.log import get_logger
 from pr_agent.servers.help import HelpMessage
-from pr_agent.text_utils import (count_chars_without_html, insert_br_after_x_chars,
-                                 replace_code_tags, sanitize_diagram)
+from pr_agent.tools.text_utils import (count_chars_without_html, insert_br_after_x_chars,
+                                       replace_code_tags, sanitize_diagram)
 from pr_agent.tools.ticket_pr_compliance_check import (
     extract_and_cache_pr_tickets, extract_ticket_links_from_pr_description,
     extract_tickets)

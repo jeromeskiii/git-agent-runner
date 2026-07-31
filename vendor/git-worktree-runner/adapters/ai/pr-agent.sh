@@ -4,15 +4,16 @@
 # Usage: git gtr ai <worktree> --ai pr-agent -- <pr-agent args...>
 #   or via config: git gtr config set gtr.ai.default pr-agent
 #
-# The adapter expects pr-agent to be installed (pip install pr-agent or
-# available at the root-level orchestrator path).
+# The adapter expects pr-agent to be installed (via the root git-agent-runner
+# venv, PATH, or a pr-agent project venv).
 
-_PR_AGENT_DIR="${GTR_PR_AGENT_DIR:-${GTR_DIR}/../pr-agent}"
+_GIT_AGENT_RUNNER_ROOT="$(cd "${GTR_DIR}/../.." && pwd)"
+_PR_AGENT_DIR="${GTR_PR_AGENT_DIR:-${_GIT_AGENT_RUNNER_ROOT}/vendor/pr-agent}"
 
 _find_pr_agent() {
   # Prefer orchestrator-level venv
-  if [ -x "${GTR_DIR}/../.venv/bin/pr-agent" ]; then
-    echo "${GTR_DIR}/../.venv/bin/pr-agent"
+  if [ -x "${_GIT_AGENT_RUNNER_ROOT}/.venv/bin/pr-agent" ]; then
+    echo "${_GIT_AGENT_RUNNER_ROOT}/.venv/bin/pr-agent"
     return 0
   fi
   # Fall back to PATH

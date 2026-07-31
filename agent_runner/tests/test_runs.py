@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 
@@ -166,3 +167,32 @@ def test_missing_file_yields_nothing(tmp_path: Path) -> None:
     h = RunHistory(path=tmp_path / "nope.jsonl")
     assert list(h.iter_all()) == []
     assert h.latest() == []
+
+
+def test_concurrent_appends_stay_wellformed(tmp_path: Path) -> None:
+    """The sidecar lock must keep concurrent writers from interleaving lines."""
+    import threading
+
+    history = RunHistory(path=tmp_path / "runs.jsonl")
+
+    def writer(n: int) -> None:
+        for i in range(50):
+            history.append(
+                RunRecord(
+                    run_id=f"run-{n}",
+                    ts=time.time(),
+                    event="stage",
+                    extra={"i": i, "blob": "x" * 4000},  # big records stress interleaving
+                )
+            )
+
+    threads = [threading.Thread(target=writer, args=(n,)) for n in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    lines = (tmp_path / "runs.jsonl").read_text().splitlines()
+    assert len(lines) == 200
+    for line in lines:
+        json.loads(line)  # every line is a complete, valid record

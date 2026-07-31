@@ -8,11 +8,15 @@ packages = ["agent_runner"]
 [project]
 name = "git-agent-runner"
 version = "0.1.0"
-description = "Orchestrator that wires git-worktree-runner and pr-agent together into a dynamic agent pipeline"
-requires-python = ">=3.12"
+description = "All-in-one orchestrator that vendors git-worktree-runner and pr-agent behind one agent-runner CLI"
+requires-python = ">=3.12,<3.15"
 dependencies = [
+    "rich>=13.0.0",
     "pr-agent",
 ]
+
+[tool.uv.sources]
+pr-agent = { path = "vendor/pr-agent", editable = true }
 
 [project.optional-dependencies]
 dev = [

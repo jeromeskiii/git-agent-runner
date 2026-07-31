@@ -69,12 +69,12 @@ jobs:
           version: "latest"
           enable-cache: true
           cache-dependency-glob: "uv.lock"
-      - name: Install gtr (git-worktree-runner)
+      - name: Install gtr (vendored git-worktree-runner)
         run: |
           # install.sh expects macOS for the homebrew path; on Linux we just
           # symlink the binary into ~/.local/bin and prepend it to PATH.
           mkdir -p "$HOME/.local/bin"
-          ln -sf "$(pwd)/git-worktree-runner/bin/git-gtr" "$HOME/.local/bin/git-gtr"
+          ln -sf "$(pwd)/vendor/git-worktree-runner/bin/git-gtr" "$HOME/.local/bin/git-gtr"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - run: uv sync --extra dev
       - name: Verify CLI is installed

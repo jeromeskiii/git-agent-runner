@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import pytest
@@ -36,22 +37,47 @@ def test_run_retries_transient_failures(monkeypatch: pytest.MonkeyPatch) -> None
 
     monkeypatch.setattr("agent_runner.process_utils.time.sleep", fake_sleep)
 
-    # Use a shell-like test: first two calls fail (exit 2 = retryable), third succeeds.
+    # First two attempts fail (exit 2 = retryable), third succeeds.
     counter = {"i": 0}
 
-    def fake_subprocess_run(*args: object, **kwargs: object) -> _FakeCompleted:
-        counter["i"] += 1
-        if counter["i"] < 3:
-            return _FakeCompleted(2, "", "")
-        return _FakeCompleted(0, "ok", "")
+    class _FakePopen:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            counter["i"] += 1
+            self.returncode = 2 if counter["i"] < 3 else 0
 
-    import subprocess
+        def communicate(self, timeout: object = None) -> tuple[str, str]:
+            return "", ""
 
-    monkeypatch.setattr(subprocess, "run", fake_subprocess_run)
+    monkeypatch.setattr("agent_runner.process_utils.subprocess.Popen", _FakePopen)
     r = run(["whatever"], retries=3, backoff=1.1, retry_on_exit=frozenset({2}))
     assert r.ok
     assert r.attempts == 3
     assert calls["n"] == 2  # slept between each of the 3 attempts
+
+
+def test_run_timeout_kills_process_group(tmp_path: Path) -> None:
+    """Fault injection: a timed-out command must not leave orphaned
+    grandchildren running — the marker must never be written."""
+    marker = tmp_path / "marker"
+    # Grandchild writes the marker at t=1.0s; parent sleeps forever.
+    r = run(
+        ["sh", "-c", f'(sleep 1; touch "{marker}") & exec sleep 30'],
+        timeout=0.2,
+    )
+    assert r.timed_out is True
+    assert not r.ok
+    time.sleep(1.5)  # well past the grandchild's scheduled write
+    assert not marker.exists()
+
+
+def test_run_stream_returns_empty_output(capfd: pytest.CaptureFixture[str]) -> None:
+    r = run(["echo", "hi"], stream=True)
+    assert r.ok
+    assert r.stdout == ""
+    assert r.stderr == ""
+    # ...but the child's output reached our stdout (fd-level capture, since
+    # the child inherits the real fd, not pytest's sys.stdout object).
+    assert "hi" in capfd.readouterr().out
 
 
 def test_run_check_raises() -> None:
@@ -85,8 +111,20 @@ def test_command_result_short_cmd_truncates() -> None:
     assert "..." in r.short_cmd()
 
 
-class _FakeCompleted:
-    def __init__(self, rc: int, out: str, err: str) -> None:
-        self.returncode = rc
-        self.stdout = out
-        self.stderr = err
+def test_run_interrupt_kills_process_group(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _FakeInterruptPopen:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            self.pid = 99999
+
+        def communicate(self, timeout: object = None) -> tuple[str, str]:
+            raise KeyboardInterrupt()
+
+    killed_pgids = []
+    monkeypatch.setattr("agent_runner.process_utils.subprocess.Popen", _FakeInterruptPopen)
+    monkeypatch.setattr("os.getpgid", lambda pid: 99999)
+    monkeypatch.setattr("os.killpg", lambda pgid, sig: killed_pgids.append((pgid, sig)))
+
+    with pytest.raises(KeyboardInterrupt):
+        run(["whatever"])
+
+    assert (99999, 9) in killed_pgids

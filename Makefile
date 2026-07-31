@@ -1,14 +1,14 @@
 # git-agent-runner — root Makefile
 #
-# Wires git-worktree-runner (gtr) and pr-agent together into a
-# dynamic agent pipeline.
+# Wires vendored git-worktree-runner (gtr) and pr-agent together into a
+# single dynamic agent pipeline.
 
 .PHONY: help install install-gtr install-pr-agent test test-orchestrator lint format typecheck setup all clean
 
 help:
 	@echo "git-agent-runner — dynamic agent pipeline"
 	@echo "  setup             Install gtr + pr-agent + orchestrator"
-	@echo "  install-gtr       Install git-worktree-runner (gtr CLI)"
+	@echo "  install-gtr       Install vendored git-worktree-runner (gtr CLI)"
 	@echo "  install-pr-agent  Install pr-agent in venv"
 	@echo "  test              Run orchestrator tests (agent_runner/tests)"
 	@echo "  test-orchestrator Alias for test"
@@ -23,7 +23,7 @@ setup: install-gtr install-pr-agent
 	@echo "   Run: agent-runner --help"
 
 install-gtr:
-	cd git-worktree-runner && bash install.sh
+	cd vendor/git-worktree-runner && bash install.sh
 	@echo "✅ gtr installed"
 
 install-pr-agent:

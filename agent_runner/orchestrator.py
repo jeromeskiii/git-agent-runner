@@ -12,8 +12,9 @@ from pathlib import Path
 
 from .config import Config, load_config
 from .logging_utils import get_logger
-from .pipeline import PipelineContext, run_full_pipeline
-from .process_utils import CommandResult, run
+from .pipeline import PipelineContext, run_full_pipeline, run_pr_agent
+from .preflight import run_preflight
+from .process_utils import CommandResult
 from .runs import HistoryLimits, RunHistory
 
 log = get_logger("orchestrator")
@@ -65,6 +66,10 @@ def run_pipeline(
     timeout: int | None = None,
     *,
     dry_run: bool = False,
+    agent_timeout: int | None = None,
+    review_iterations: int | None = None,
+    cleanup: bool | None = None,
+    skip_preflight: bool = False,
 ) -> PipelineContext:
     """Run the full agent pipeline on a task.
 
@@ -74,11 +79,24 @@ def run_pipeline(
         agent: AI agent name. Defaults to ``config.default_agent``.
         timeout: Seconds to wait for PR creation. Defaults to ``config.default_timeout``.
         dry_run: If True, skip every external command and only emit what would run.
+        agent_timeout: Seconds to wait for the agent stage. Defaults to
+            ``config.agent_timeout``.
+        review_iterations: Review→agent feedback rounds. Defaults to
+            ``config.review_iterations``.
+        cleanup: Remove the worktree if the run fails. Defaults to
+            ``config.cleanup_on_error``.
+        skip_preflight: If True, skip pre-flight validation checks.
 
     Returns:
         PipelineContext with results and any errors.
     """
     cfg = _resolve_config(repo)
+    if agent_timeout is not None:
+        cfg.agent_timeout = agent_timeout
+    if review_iterations is not None:
+        cfg.review_iterations = review_iterations
+    if cleanup is not None:
+        cfg.cleanup_on_error = cleanup
     chosen_agent = agent or cfg.default_agent
 
     history = RunHistory(
@@ -107,6 +125,14 @@ def run_pipeline(
         )
         return ctx
 
+    if not dry_run and not skip_preflight:
+        preflight = run_preflight(ctx.repo_root)
+        ctx.preflight = preflight
+        for err in preflight.errors:
+            ctx.errors.append(err)
+        if preflight.errors:
+            return ctx
+
     return run_full_pipeline(ctx, pr_timeout=timeout)
 
 
@@ -122,11 +148,5 @@ def improve_pr(pr_url: str, repo: str | Path) -> PrActionResult:
 
 def _pr_action(pr_url: str, repo: str | Path, action: str) -> PrActionResult:
     cfg = _resolve_config(repo)
-    result = run(
-        ["pr-agent", "--pr_url", pr_url, action],
-        cwd=Path(repo).resolve(),
-        timeout=cfg.subprocess_timeout,
-        retries=max(0, cfg.retry_attempts - 1),
-        backoff=cfg.retry_backoff,
-    )
+    result = run_pr_agent(pr_url, action, Path(repo).resolve(), cfg)
     return PrActionResult.from_command(pr_url, action, result)

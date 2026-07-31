@@ -5,10 +5,25 @@ default_agent = "claude"
 poll_interval = 10
 default_timeout = 300
 subprocess_timeout = 120
+agent_timeout = 1800
 retry_attempts = 3
 retry_backoff = 1.5
+review_iterations = 1
+cleanup_on_error = false
 
 # Register a custom agent. The CLI ``--agent <name>`` flag will then accept it.
+# ``args`` are passed to the agent (after gtr's ``--`` pass-through) right
+# before the task text. Choose flags that make the agent run non-interactively;
+# the pipeline cannot answer prompts. For claude, the built-in default is
+# ["-p", "--permission-mode", "acceptEdits"] (headless + auto-accept file
+# edits in the worktree) — use "--dangerously-skip-permissions" only if you
+# accept fully unattended actions with your credentials.
 # [agents.kiro]
 # command = ["kiro", "--yes"]
+# args = []
 # description = "Kiro CLI"
+
+[agents.ternary-bonsai]
+command = ["python", "-m", "agent_runner.ternary_bonsai_agent"]
+args = ["--repo-id", "prism-ml/Ternary-Bonsai-27B-gguf", "--filename", "Ternary-Bonsai-27B-F16.gguf"]
+description = "Local llama-cpp-python agent using Ternary-Bonsai 27B GGUF"

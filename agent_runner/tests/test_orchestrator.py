@@ -49,7 +49,7 @@ class TestRunPipeline:
         # No gtr / gh / pr-agent required when dry_run=True.
         ctx = run_pipeline(task="hello", repo=tmp_path, dry_run=True)
         # In dry_run we still set branch_name + worktree_path + pr_url.
-        assert ctx.branch_name == "agent/hello"
+        assert ctx.branch_name.startswith("agent/hello-")
         assert ctx.worktree_path.startswith("<dry-run>")
         assert ctx.errors == []
 
@@ -91,7 +91,7 @@ class TestRunPipeline:
 
 
 class TestPrActions:
-    @patch("agent_runner.orchestrator.run")
+    @patch("agent_runner.pipeline.run")
     def test_review_pr_success(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             ok=True,
@@ -106,7 +106,7 @@ class TestPrActions:
         assert r.success is True
         assert r.action == "review"
 
-    @patch("agent_runner.orchestrator.run")
+    @patch("agent_runner.pipeline.run")
     def test_improve_pr_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             ok=False,
@@ -121,7 +121,7 @@ class TestPrActions:
         assert r.success is False
         assert r.action == "improve"
 
-    @patch("agent_runner.orchestrator.run")
+    @patch("agent_runner.pipeline.run")
     def test_pr_action_uses_config_timeouts(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             ok=True, returncode=0, stdout="", stderr="", duration_s=0.1, timed_out=False, attempts=1
@@ -130,3 +130,4 @@ class TestPrActions:
         kwargs = mock_run.call_args.kwargs
         assert kwargs["timeout"] == 120  # default subprocess_timeout
         assert kwargs["retries"] == 2  # retry_attempts - 1
+        assert kwargs["retry_on_timeout"] is False  # posted comments must not duplicate
